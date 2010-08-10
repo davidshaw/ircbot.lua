@@ -36,11 +36,22 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the ircbot.lua Project. 
 ]]--
 
+--[[
+	TODO !!
+	
+	- Socket (s) needs to be global (table?) to be accessible
+	by all functions, instead of passed as an argument as it is currently.
+	
+	- File IO for functions (memos, possible http cache?)
+	
+		\- Loading config from config.txt
+]]
+
 require "socket" -- luasocket
 
 -- globals
 list = {}
-
+lineregex = "[^\r\n]+"
 
 -- definitions for use later in the script
 function deliver(s, content)
@@ -61,13 +72,87 @@ function sync(lnick)
 	return true	
 end
 
+function repspace(main, first, second)
+	-- start with 0 --> first instance to replace
+	local relapsed = string.sub(main, 1, string.find(main, first) -1 ) 
+	
+	local temp = string.sub(main, string.find(main, first) + 1)
+	relapsed = relapsed .. second .. temp
+	
+	while string.find(relapsed, first) do
+		temp = string.sub(relapsed, string.find(relapsed, first) + 1)
+		relapsed = string.sub(relapsed, 1, string.find(relapsed, first) -1 )
+		
+		relapsed = relapsed .. second .. temp
+	end
+	
+	return relapsed
+end
+
+function getpage(url)
+	local http = require("socket.http") -- this is included with luasocket
+	local page = {}
+	local page, status = http.request(url) -- 1 = body, 2 = status?
+	if verbose then print(page, status) end
+	return page
+end
+
 -- process needs to process "line" and call higher bot tasks
 function process(s, channel, lnick, line) --!! , nick, host
+	-- automatically detects http
+	if string.find(line, "http") then
+		local request = string.sub(line, string.find(line, "http"), #line)
+		if string.find(request, " ") then 
+			request = string.sub(request, 1, (string.find(request, " ")-1))
+		end
+		
+		local page = getpage(request)
+
+		for lin in string.gmatch(page, lineregex) do
+			if string.find(lin, "<title>") then
+
+				if #lin < string.find(lin, "<title>")+8 then
+					msg(s, channel, "[!] no support for \"youtube-style\" urls yet, sorry")
+				else
+					local title = string.sub(lin, (string.find(lin, "<title>")+7), (string.find(lin, "</title")-1))
+					msg(s, channel, title)
+				end -- !! TODO: add support for "youtube-stye" <title> scheme (nextline)
+			end
+		end
+	end
+	
 	-- adds users to the sync table
 	if string.find(line, "!sync") then
 		if sync(lnick) then
 			msg(s, channel, lnick .. ": added you to to the sync table")
 		else msg(s, channel, lnick .. ": you are already on the list!") end
+	end
+	-- grab weather from weather underground
+	if string.find(line, "!temp") then
+		local zip = string.sub(line, (string.find(line, "!temp ") + 6))
+		local query = zip
+		if string.find(zip, " ") then query = repspace(zip, ' ', '%20') end
+		local page = getpage("http://www.wunderground.com/cgi-bin/findweather/getForecast?query=" .. query .. "&wuSelect=WEATHER")
+		for bline in string.gmatch(page, lineregex) do
+			if string.find(bline, "tempf") then
+				msg(s, channel, lnick .. ": the current temperature is " .. string.sub(bline, string.find(bline, "value") + 7, #bline -4))
+				return
+			end
+		end
+	end
+	if string.find(line, "!help") then
+		local com = {}
+		com[#com + 1] = "Lua IRC Bot -- by dshaw"
+		com[#com + 1] = "-- Help and Usage --"
+		com[#com + 1] = "[Automatic] -- URL titles are automatically announced to channel"
+		com[#com + 1] = "!sync -- join an ongoing \"sync\" session"
+		com[#com + 1] = "!start -- start a ready \"sync\" session"
+		com[#com + 1] = "!whatis <query> -- returns a Google definition for <query>"
+		com[#com + 1] = "!temp <zip code or city name, state>"
+		
+		for x=1, #com do
+			msg(s, channel, com[x])
+		end
 	end
 	-- starts the countdown and clears the sync table
 	if string.find(line, "!start") then
@@ -77,7 +162,23 @@ function process(s, channel, lnick, line) --!! , nick, host
 		for y=3, 1, -1 do
 			msg(s, channel, "starting in " .. y)
 			os.execute("sleep 1")
-			list = {}
+		end
+		
+		msg(s, channel, "--- SYNC ---")
+		list = {}
+	end
+	-- google whatis
+	if string.find(line, "!whatis") then
+		-- find the query
+		-- !! function findparam(line, functionname)   VVVVVVVVVVVVVVVVVV
+		local query = string.sub(line, (string.find(line, "!whatis") + 8))
+		local page = getpage('http://www.google.com/search?q=define%3A' .. query)
+		for line in string.gmatch(page, lineregex) do
+			if string.find(line, "disc") then
+				local answer = string.sub(line, (string.find(line, "disc") + 20) )
+				local ret = string.sub(answer, 1, (string.find(answer, "<")-1))
+				msg(s, channel, ret)
+			end
 		end
 	end
 	-- returns system uptime
