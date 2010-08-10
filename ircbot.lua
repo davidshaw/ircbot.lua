@@ -36,7 +36,11 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the ircbot.lua Project. 
 ]]--
 
-require "socket"
+require "socket" -- luasocket
+
+-- globals
+list = {}
+
 
 -- definitions for use later in the script
 function deliver(s, content)
@@ -47,24 +51,49 @@ function msg(s, channel, content)
 	deliver(s, "PRIVMSG " .. channel .. " :" .. content)
 end
 
--- process needs to process "line" and call higher bot tasks
--- !! should take more than line, eg, nick, host (memos)
-function process(s, channel, line) --!! , nick, host
-	if string.find(line, "!test") then
-		msg(s, channel, "WHOA BUDDY WHAT IS THIS DEBUG FANTASY LAND?")
+function sync(lnick)
+	for x=1, #list do
+		if list[x] == lnick then
+			return false
+		end
 	end
+	list[#list + 1] = lnick
+	return true	
+end
+
+-- process needs to process "line" and call higher bot tasks
+function process(s, channel, lnick, line) --!! , nick, host
+	-- adds users to the sync table
+	if string.find(line, "!sync") then
+		if sync(lnick) then
+			msg(s, channel, lnick .. ": added you to to the sync table")
+		else msg(s, channel, lnick .. ": you are already on the list!") end
+	end
+	-- starts the countdown and clears the sync table
+	if string.find(line, "!start") then
+		for x=1, (#list) do
+			msg(s, channel, list[x] .. ": the time has come!")
+		end
+		for y=3, 1, -1 do
+			msg(s, channel, "starting in " .. y)
+			os.execute("sleep 1")
+			list = {}
+		end
+	end
+	-- returns system uptime
 	if string.find(line, "!uptime") then
 		local f = io.popen("uptime")
-		msg(s, channel, f:read("*l"))
+		msg(s, channel, lnick .. ":" .. f:read("*l"))
 	end
 end
 
 -- config
 -- !! should take cli args 
-local serv = "madjack.2600.net"
-local nick = "b0t[lua]"
-local channel = "#botest"
+local serv = arg[1]
+local nick = arg[2]
+local channel = "#" .. arg[3]
 local verbose = false
+local welcomemsg = "**chhckkk** Lua Bot has arrived."
 
 -- connect
 print("[+] setting up socket...")
@@ -72,23 +101,25 @@ s = socket.tcp()
 s:connect(socket.dns.toip(serv), 6667) -- !! add more support later
 
 -- initial setup
-print("[+] trying", nick)
+-- !! function-ize
+print("[+] trying nick", nick)
 s:send("USER " .. nick .. " " .. " " .. nick .. " " ..  nick .. " " .. ":" .. nick .. "\r\n\r\n")
 s:send("NICK " .. nick .. "\r\n\r\n")
 print("[+] joining", channel)
 s:send("JOIN " .. channel .. "\r\n\r\n")
 
--- !! default message perhaps?
-msg(s, channel, "Hello, humans. I am here to serve you.")
+
+if welcomemsg then msg(s, channel, welcomemsg) end
 
 -- the guts of the script -- parses out input and processes
 while true do
+	-- just grab one line ("*l")
 	receive = s:receive('*l')
+	
 	-- gotta grab the ping "sequence".
 	if string.find(receive, "PING :") then
 		s:send("PONG :" .. string.sub(receive, (string.find(receive, "PING :") + 6)) .. "\r\n\r\n")
-		-- !! should make this verbose?
-		print(" [+] sent server pong")
+		if verbose then print("[+] sent server pong") end
 	else
 		-- is this a message?
 		if string.find(receive, "PRIVMSG") then
@@ -96,10 +127,9 @@ while true do
 			line = string.sub(receive, (string.find(receive, channel .. " :") + (#channel) + 2))
 			lnick = string.sub(receive, (string.find(receive, ":")+1), (string.find(receive, "!")-1))
 			-- !! add support for multiple channels (lchannel)
-			process(s, channel, line)
+			process(s, channel, lnick, line)
 		end		
 	end
-	
 	-- verbose flag sees everything
 	if verbose then print(receive) end
 end
