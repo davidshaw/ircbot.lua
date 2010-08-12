@@ -218,6 +218,7 @@ function process(s, channel, lnick, line) --!! , nick, host
 		com[#com + 1] = "!temp <zip code or city name, state>"
 		com[#com + 1] = "!fws <query> -- searches FatWallet Hot Deals for <query>"
 		com[#com + 1] = "!woot -- returns the woot.com deal of the day and price"
+		com[#com + 1] = "!memo <nick> <message> -- relays your <message> to <nick> the next time they speak."
 		for x=1, #com do
 			msg(s, channel, com[x])
 		end
