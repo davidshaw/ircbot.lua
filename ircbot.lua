@@ -20,7 +20,7 @@ this list of conditions and the following disclaimer.
 this list of conditions and the following disclaimer in the documentation
 and/or other materials provided with the distribution.
       
-THIS SOFTWARE IS PROVIDED BY THE FREEBSD PROJECT ``AS IS'' AND ANY EXPRESS
+THIS SOFTWARE IS PROVIDED BY THE IRCBOT.lua PROJECT ``AS IS'' AND ANY EXPRESS
 OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES 
 OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO 
 EVENT SHALL THE FREEBSD PROJECT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
@@ -52,6 +52,7 @@ require "socket" -- luasocket
 -- globals
 list = {}
 lineregex = "[^\r\n]+"
+memo = {}
 
 -- definitions for use later in the script
 function deliver(s, content)
@@ -76,11 +77,11 @@ function repspace(main, first, second)
 	-- start with 0 --> first instance to replace
 	local relapsed = string.sub(main, 1, string.find(main, first) -1 ) 
 	
-	local temp = string.sub(main, string.find(main, first) + 1)
+	local temp = string.sub(main, string.find(main, first) + #first)
 	relapsed = relapsed .. second .. temp
 	
 	while string.find(relapsed, first) do
-		temp = string.sub(relapsed, string.find(relapsed, first) + 1)
+		temp = string.sub(relapsed, string.find(relapsed, first) + #first)
 		relapsed = string.sub(relapsed, 1, string.find(relapsed, first) -1 )
 		
 		relapsed = relapsed .. second .. temp
@@ -99,9 +100,40 @@ end
 
 -- process needs to process "line" and call higher bot tasks
 function process(s, channel, lnick, line) --!! , nick, host
+	for key, val in pairs(memo) do
+		if key == lnick then
+			msg(s, channel, lnick .. ": " .. val)
+			memo[lnick] = nil -- remove the memo
+		end
+	end
+	-- woot
+	if string.find(line, "!woot") then
+		local page = getpage("http://www.woot.com/")
+		for line in string.gmatch(page, "[^\r\n]+") do
+			if string.find(line, "<h2 class=\"fn\">") then
+				local name = string.sub(line, string.find(line, "\">")+2, string.find(line, "</")-1)
+				msg(s, channel, "the woot item of the day is " .. name)
+			end
+			if string.find(line, "<span class=\"amount\">") then
+				local price = string.sub(line, (string.find(line, "\"amount")+9), (string.find(line, "</span")-1))
+				msg(s, channel, "this item is selling for: " .. price)
+			end
+		end
+	end
+	-- add memo for users
+	if string.find(line, "!memo ") then
+		local nick = string.sub(line, string.find(line, "!memo ")+6, #line)
+		nick = string.sub(nick, 1, string.find(nick, " ")-1)
+		local message = string.sub(line, string.find(line, nick)+#nick+1, #line)
+		local found = false
+		for key, val in pairs(memo) do
+			if key == nick then found = true end
+		end
+		if not found then memo[nick] = "<" .. lnick .. "> " .. message end
+	end
 	-- automatically detects http
-	if string.find(line, "http") then
-		local request = string.sub(line, string.find(line, "http"), #line)
+	if string.find(line, "http://") then
+		local request = string.sub(line, string.find(line, "http://"), #line)
 		if string.find(request, " ") then 
 			request = string.sub(request, 1, (string.find(request, " ")-1))
 		end
@@ -120,6 +152,28 @@ function process(s, channel, lnick, line) --!! , nick, host
 			end
 		end
 	end
+	-- respond to action
+	if string.find(line, "ACTION") and string.find(line, "subz3ro") then -- !! globalize nick
+		--lol
+		msg(s, channel, "ima drop kick " .. lnick .. " in about ten seconds")
+	end
+	
+	-- fatwallet search
+	if string.find(line, "!fws") then
+		local search = " "
+		local count = 0
+		if #line >= line:find("!fws")+5 then
+		search = line:sub(line:find("!fws ")+4, #line)
+		end
+		local page = getpage("http://feeds.feedburner.com/FatwalletHotDeals.html")
+		for line in page:gmatch("[^\r\n]+") do
+			local lline = line:lower()
+			if line:find('title><') and line:find("CDATA") and lline:find(search:lower()) and count < 5 then
+				msg(s, channel, line:sub(line:find("title><")+15, #line-14))
+				count = count + 1
+			end
+		end
+	end
 	
 	-- adds users to the sync table
 	if string.find(line, "!sync") then
@@ -132,24 +186,38 @@ function process(s, channel, lnick, line) --!! , nick, host
 		local zip = string.sub(line, (string.find(line, "!temp ") + 6))
 		local query = zip
 		if string.find(zip, " ") then query = repspace(zip, ' ', '%20') end
+		--msg(s, channel, "getting weather for " .. query)
 		local page = getpage("http://www.wunderground.com/cgi-bin/findweather/getForecast?query=" .. query .. "&wuSelect=WEATHER")
 		for bline in string.gmatch(page, lineregex) do
 			if string.find(bline, "tempf") then
-				msg(s, channel, lnick .. ": the current temperature is " .. string.sub(bline, string.find(bline, "value") + 7, #bline -4))
+				msg(s, channel, lnick .. ": the current temperature is " .. string.sub(bline, string.find(bline, "value") + 7, #bline -4) .. "F")
+				msg(s, channel, lnick .. ": forecast info: http://wolframalpha.com/input/?i=forecast+" .. query)
 				return
 			end
 		end
 	end
+	if string.find(line, "!host ") then
+		local host = string.sub(line, string.find(line, "!host ")+6)
+		if string.find(host, " ") then
+			host = string.sub(host, 1, string.find(host, " "))
+		end
+		
+		local f = io.popen("host " .. host)
+		local ret = f:read("*l")
+		msg(s, channel, ret)
+
+	end
 	if string.find(line, "!help") then
 		local com = {}
 		com[#com + 1] = "Lua IRC Bot -- by dshaw"
-		com[#com + 1] = "-- Help and Usage --"
+		com[#com + 1] = "--- Help and Usage ---"
 		com[#com + 1] = "[Automatic] -- URL titles are automatically announced to channel"
 		com[#com + 1] = "!sync -- join an ongoing \"sync\" session"
 		com[#com + 1] = "!start -- start a ready \"sync\" session"
 		com[#com + 1] = "!whatis <query> -- returns a Google definition for <query>"
 		com[#com + 1] = "!temp <zip code or city name, state>"
-		
+		com[#com + 1] = "!fws <query> -- searches FatWallet Hot Deals for <query>"
+		com[#com + 1] = "!woot -- returns the woot.com deal of the day and price"
 		for x=1, #com do
 			msg(s, channel, com[x])
 		end
@@ -177,6 +245,9 @@ function process(s, channel, lnick, line) --!! , nick, host
 			if string.find(line, "disc") then
 				local answer = string.sub(line, (string.find(line, "disc") + 20) )
 				local ret = string.sub(answer, 1, (string.find(answer, "<")-1))
+				if ret:find("&quot;") then 
+					ret = repspace(ret, "&quot;", '"')
+				end
 				msg(s, channel, ret)
 			end
 		end
@@ -199,11 +270,12 @@ local welcomemsg = "**chhckkk** Lua Bot has arrived."
 -- connect
 print("[+] setting up socket...")
 s = socket.tcp()
-s:connect(socket.dns.toip(serv), 6667) -- !! add more support later
+s:connect(socket.dns.toip(serv), 1067) -- !! add more support later
 
 -- initial setup
 -- !! function-ize
 print("[+] trying nick", nick)
+s:send("PASS DontSayShit!\r\n\r\n")
 s:send("USER " .. nick .. " " .. " " .. nick .. " " ..  nick .. " " .. ":" .. nick .. "\r\n\r\n")
 s:send("NICK " .. nick .. "\r\n\r\n")
 print("[+] joining", channel)
