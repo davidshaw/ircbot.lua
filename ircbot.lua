@@ -271,12 +271,11 @@ local welcomemsg = "**chhckkk** Lua Bot has arrived."
 -- connect
 print("[+] setting up socket...")
 s = socket.tcp()
-s:connect(socket.dns.toip(serv), 1067) -- !! add more support later
+s:connect(socket.dns.toip(serv), 6667) -- !! add more support later
 
 -- initial setup
 -- !! function-ize
 print("[+] trying nick", nick)
-s:send("PASS DontSayShit!\r\n\r\n")
 s:send("USER " .. nick .. " " .. " " .. nick .. " " ..  nick .. " " .. ":" .. nick .. "\r\n\r\n")
 s:send("NICK " .. nick .. "\r\n\r\n")
 print("[+] joining", channel)
