@@ -219,6 +219,7 @@ function process(s, channel, lnick, line) --!! , nick, host
 		com[#com + 1] = "!fws <query> -- searches FatWallet Hot Deals for <query>"
 		com[#com + 1] = "!woot -- returns the woot.com deal of the day and price"
 		com[#com + 1] = "!memo <nick> <message> -- relays your <message> to <nick> the next time they speak."
+		com[#com + 1] = "!sunset <zip> -- fetches today's sunset time"
 		for x=1, #com do
 			msg(s, channel, com[x])
 		end
@@ -253,6 +254,17 @@ function process(s, channel, lnick, line) --!! , nick, host
 			end
 		end
 	end
+	if string.find(line, "!sunset") then
+		local query = string.sub(line, (string.find(line, "!sunset") + 8))
+		local page = getpage('http://www.google.com/search?q=sunset+' .. query)
+		for line in string.gmatch(page, lineregex) do
+			if string.find(line, '<td class="r">') then
+				local answer= string.sub(line, (string.find(line, '<td class="r">') + 26), #line)
+				local ret = answer:sub(1, (answer:find('<')-1))
+				msg(s, channel, ret)
+			end
+		end
+	end
 	-- returns system uptime
 	if string.find(line, "!uptime") then
 		local f = io.popen("uptime")
@@ -271,9 +283,10 @@ local welcomemsg = "**chhckkk** Lua Bot has arrived."
 -- connect
 print("[+] setting up socket...")
 s = socket.tcp()
-s:connect(socket.dns.toip(serv), 6667) -- !! add more support later
+s:connect(socket.dns.toip(serv), 6667) -- !! add more support later; ssl?
 
 -- initial setup
+
 -- !! function-ize
 print("[+] trying nick", nick)
 s:send("USER " .. nick .. " " .. " " .. nick .. " " ..  nick .. " " .. ":" .. nick .. "\r\n\r\n")
