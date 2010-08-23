@@ -132,7 +132,7 @@ function process(s, channel, lnick, line) --!! , nick, host
 		if not found then memo[nick] = "<" .. lnick .. "> " .. message end
 	end
 	-- automatically detects http
-	if string.find(line, "http://") then
+	if string.find(line, "http://") and not line:find("!shady") then
 		local request = string.sub(line, string.find(line, "http://"), #line)
 		if string.find(request, " ") then 
 			request = string.sub(request, 1, (string.find(request, " ")-1))
@@ -220,6 +220,8 @@ function process(s, channel, lnick, line) --!! , nick, host
 		com[#com + 1] = "!woot -- returns the woot.com deal of the day and price"
 		com[#com + 1] = "!memo <nick> <message> -- relays your <message> to <nick> the next time they speak."
 		com[#com + 1] = "!sunset <zip> -- fetches today's sunset time"
+		com[#com + 1] = "!last <last.fm username> -- fetches the last track played"
+		com[#com + 1] = "!shady <url> -- makes a url shady"
 		for x=1, #com do
 			msg(s, channel, com[x])
 		end
@@ -236,6 +238,38 @@ function process(s, channel, lnick, line) --!! , nick, host
 		
 		msg(s, channel, "--- SYNC ---")
 		list = {}
+	end
+	-- last.fm listing
+	if line:find("!last") then
+		pr = line:sub((line:find("!last")+6), #line)
+		local page = getpage('http://www.last.fm/user/' .. pr)
+		for l in page:gmatch(lineregex) do
+			if l:find('a href="/music/') then
+				local tit = l:sub((l:find('a href="/music/')+15), #l)
+				-- lol tit
+				-- it's short for title
+				-- you pervert
+				local title = tit:sub(1, (tit:find('"')-1))
+				if title:find('+') then title = repspace(title, '+', ' ') end
+				if title:find('/') then title = repspace(title, '/', '') end
+				if title:find('_') then title = repspace(title, '_', ' -- ') end
+				msg(s, channel, pr .. "'s last played track: " .. title)
+				return
+			end
+		end
+	end
+	-- bit.ly service
+	if line:find("!shady") then
+		local ln = line:sub((line:find("!shady")+7), #line)
+		local page = getpage('http://www.shadyurl.com/create.php?myUrl=' .. ln)
+		for l in page:gmatch(lineregex) do
+			if l:find('is now') then
+				local ur = l:sub( (l:find('is now')+20), #l)
+				local url = ur:sub(1, (ur:find("'")-1))
+				msg(s, channel, url)
+				return
+			end
+		end
 	end
 	-- google whatis
 	if string.find(line, "!whatis") then
@@ -278,7 +312,7 @@ local serv = arg[1]
 local nick = arg[2]
 local channel = "#" .. arg[3]
 local verbose = false
-local welcomemsg = "**chhckkk** Lua Bot has arrived."
+local welcomemsg = "Shall we play a game?"
 
 -- connect
 print("[+] setting up socket...")
@@ -289,6 +323,7 @@ s:connect(socket.dns.toip(serv), 6667) -- !! add more support later; ssl?
 
 -- !! function-ize
 print("[+] trying nick", nick)
+
 s:send("USER " .. nick .. " " .. " " .. nick .. " " ..  nick .. " " .. ":" .. nick .. "\r\n\r\n")
 s:send("NICK " .. nick .. "\r\n\r\n")
 print("[+] joining", channel)
