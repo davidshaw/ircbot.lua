@@ -107,6 +107,7 @@ function process(s, channel, lnick, line) --!! , nick, host
 	-- add memo for users
 	if string.find(line, "!memo ") then
 		local nick = string.sub(line, string.find(line, "!memo ")+6, #line)
+		if string.find(nick, " ") then
 		nick = string.sub(nick, 1, string.find(nick, " ")-1)
 		local message = string.sub(line, string.find(line, nick)+#nick+1, #line)
 		local found = false
@@ -114,6 +115,7 @@ function process(s, channel, lnick, line) --!! , nick, host
 			if key == nick then found = true end
 		end
 		if not found then memo[nick] = "<" .. lnick .. "> " .. message end
+		end
 	end
 	-- automatically detects http
 	if string.find(line, "http://") and not line:find("!shady") then
@@ -123,17 +125,22 @@ function process(s, channel, lnick, line) --!! , nick, host
 		end
 		
 		local page = getpage(request)
-
-		for lin in string.gmatch(page, lineregex) do
+		if page == nil then
+		  msg(s, channel, "I'm being a responsible bot and reporting an error!")
+		else
+		  for lin in string.gmatch(page, lineregex) do
 			if string.find(lin, "<title>") then
 
 				if #lin < string.find(lin, "<title>")+8 then
-					msg(s, channel, "[!] no support for \"youtube-style\" urls yet, sorry")
+		
 				else
+					if lin:find("<title>") and lin:find("</title>") then
 					local title = string.sub(lin, (string.find(lin, "<title>")+7), (string.find(lin, "</title")-1))
 					msg(s, channel, title)
+					end
 				end -- !! TODO: add support for "youtube-stye" <title> scheme (nextline)
 			end
+		  end
 		end
 	end
 	-- respond to action
@@ -242,7 +249,12 @@ function process(s, channel, lnick, line) --!! , nick, host
 			end
 		end
 	end
-	-- bit.ly service
+	-- pomodoro
+	if line:find("!pom") then
+		msg(s, channel, lnick .. " has begun a pomodoro session. Please do not disturb for 25 minutes.")
+		return
+	end
+	-- shadyurl service
 	if line:find("!shady") then
 		local ln = line:sub((line:find("!shady")+7), #line)
 		local page = getpage('http://www.shadyurl.com/create.php?myUrl=' .. ln)
@@ -260,6 +272,7 @@ function process(s, channel, lnick, line) --!! , nick, host
 		-- find the query
 		-- !! function findparam(line, functionname)   VVVVVVVVVVVVVVVVVV
 		local query = string.sub(line, (string.find(line, "!whatis") + 8))
+		if query:find(' ') then query = repspace(query, ' ', '+') end
 		local page = getpage('http://www.google.com/search?q=define%3A' .. query)
 		for line in string.gmatch(page, lineregex) do
 			if string.find(line, "disc") then
@@ -296,10 +309,10 @@ local serv = arg[1]
 local nick = arg[2]
 local channel = "#" .. arg[3]
 local verbose = false
-local welcomemsg = "Shall we play a game?"
+local welcomemsg = false
 
 -- connect
-print("[+] setting up socket...")
+print("[+] setting up socket to " .. serv)
 s = socket.tcp()
 s:connect(socket.dns.toip(serv), 6667) -- !! add more support later; ssl?
 
@@ -315,6 +328,7 @@ s:send("JOIN " .. channel .. "\r\n\r\n")
 
 
 if welcomemsg then msg(s, channel, welcomemsg) end
+local line = nil
 
 -- the guts of the script -- parses out input and processes
 while true do
@@ -329,14 +343,16 @@ while true do
 		-- is this a message?
 		if string.find(receive, "PRIVMSG") then
 			if verbose then msg(s, channel, receive) end
-			line = string.sub(receive, (string.find(receive, channel .. " :") + (#channel) + 2))
-			lnick = string.sub(receive, (string.find(receive, ":")+1), (string.find(receive, "!")-1))
+			if receive:find(channel .. " :") then line = string.sub(receive, (string.find(receive, channel .. " :") + (#channel) + 2)) end
+			if receive:find(":") and receive:find("!") then lnick = string.sub(receive, (string.find(receive, ":")+1), (string.find(receive, "!")-1)) end
 			-- !! add support for multiple channels (lchannel)
-			process(s, channel, lnick, line)
+			if line then
+				print("processing "..line)
+				process(s, channel, lnick, line)
+			end
 		end		
 	end
 	-- verbose flag sees everything
 	if verbose then print(receive) end
 end
-
 -- fin!
