@@ -230,6 +230,57 @@ function process(s, channel, lnick, line) --!! , nick, host
 		msg(s, channel, "--- SYNC ---")
 		list = {}
 	end
+--[[
+	-- find current time
+	if line:find("!time") then
+		print "processing !time"
+		local query = "carpinteria, ca"
+		if line:find('!time ') then
+			local query = line:sub((line:find('!time ')+6), #line)
+			print ("found query " .. query)
+		end		 
+		local page = getpage('http://www.google.com/search?q=time%3' .. repspace(query, ' ', '+'))
+		for l in page:gmatch(lineregex) do
+			if l:find('<td style="font-size: medium">') then
+				print ("found line " .. l)
+				local t = l:sub((l:find('<td style="font-size: medium">')+30), #line)
+				local r = t:sub(0, t:find('</td'))
+				msg(s, channel, r)
+				return
+			end
+		end
+	end
+]]--
+	-- urbandictionary
+	if line:find("!ud ") then
+		local query = line:sub((line:find('!ud ')+4), #line)
+		if query:find(' ') then
+			query = repspace(query, ' ', '+')
+		end
+		local page = getpage('http://www.urbandictionary.com/define.php?term=' .. query)
+		for l in page:gmatch(lineregex) do
+			if l:find("<meta content='") then
+				msg(s, channel, l:sub(16, (#l- 23)))
+				return			
+			end
+		end	
+	end
+	
+	if line:find("!die") and lnick == "ownpile" then
+		os.exit()
+	end
+
+	-- stackoverflow search
+	if line:find("!so ") then
+		pr = line:sub((line:find("!so")+4), #line)
+		local page = getpage('http://www.stackoverflow.com/search?q=' + repspace(pr, ' ', '+'))
+		for l in page:gmatch(lineregex) do
+			if l:find('h3') then
+				local so = l:sub((l:find('h3')+12), l.find('" class'))
+				msg(s, channel, '[StackOverflow] http://stackoverflow.com' .. so)
+				return
+
+
 	-- last.fm listing
 	if line:find("!last") then
 		pr = line:sub((line:find("!last")+6), #line)
@@ -347,7 +398,7 @@ while true do
 			if receive:find(":") and receive:find("!") then lnick = string.sub(receive, (string.find(receive, ":")+1), (string.find(receive, "!")-1)) end
 			-- !! add support for multiple channels (lchannel)
 			if line then
-				print("processing "..line)
+				--print("processing "..line)
 				process(s, channel, lnick, line)
 			end
 		end		
