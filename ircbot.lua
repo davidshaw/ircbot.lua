@@ -272,12 +272,19 @@ function process(s, channel, lnick, line) --!! , nick, host
 
 	-- stackoverflow search
 	if line:find("!so ") then
-		pr = line:sub((line:find("!so")+4), #line)
-		local page = getpage('http://www.stackoverflow.com/search?q=' + repspace(pr, ' ', '+'))
+		pr = line:sub((line:find('!so')+4), #line)
+		local page = ''
+		if pr:find(' ') then
+			page = getpage('http://www.stackoverflow.com/search?q=' .. repspace(pr, ' ', '+'))
+		else
+			page = getpage('http://www.stackoverflow.com/search?q=' .. pr)
+		end
+
 		for l in page:gmatch(lineregex) do
 			if l:find('h3') then
-				local so = l:sub((l:find('h3')+12), l.find('" class'))
-				msg(s, channel, '[StackOverflow] http://stackoverflow.com' .. so)
+				local so = l:sub((l:find('h3')+12), #l)
+				local st = so:sub(1, (so:find('"')-1))
+				msg(s, channel, '[StackOverflow] http://stackoverflow.com' .. st)
 				return
 			end
 		end
