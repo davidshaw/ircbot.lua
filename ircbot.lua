@@ -279,6 +279,9 @@ function process(s, channel, lnick, line) --!! , nick, host
 				local so = l:sub((l:find('h3')+12), l.find('" class'))
 				msg(s, channel, '[StackOverflow] http://stackoverflow.com' .. so)
 				return
+			end
+		end
+	end
 
 
 	-- last.fm listing
